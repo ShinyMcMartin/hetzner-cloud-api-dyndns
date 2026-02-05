@@ -1,0 +1,70 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create ZIP file
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          mkdir -p hetzner-dyndns-${VERSION}
+          cp dyndns.sh hetzner-dyndns-${VERSION}/
+          cp config-examples.sh hetzner-dyndns-${VERSION}/
+          cp README.md hetzner-dyndns-${VERSION}/
+          cp LICENSE hetzner-dyndns-${VERSION}/
+          zip -r hetzner-dyndns-${VERSION}.zip hetzner-dyndns-${VERSION}
+          echo "ZIP_FILE=hetzner-dyndns-${VERSION}.zip" >> $GITHUB_ENV
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
+      - name: Get changelog entry
+        id: changelog
+        run: |
+          # Extract changelog section for this version from README
+          VERSION=${GITHUB_REF#refs/tags/}
+          # Try to extract changelog, fallback to generic message
+          CHANGELOG=$(grep -A 10 "### Version.*${VERSION##v}" README.md || echo "Release ${VERSION}")
+          echo "BODY<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ env.ZIP_FILE }}
+          body: |
+            ## Hetzner DNS DynDNS Update Script - ${{ env.VERSION }}
+            
+            ${{ steps.changelog.outputs.BODY }}
+            
+            ### Contents
+            - `dyndns.sh` - Main DynDNS update script
+            - `config-examples.sh` - Configuration examples and helpers
+            - `test.sh` - Test suite
+            - `README.md` - Complete documentation
+            - `LICENSE` - GPL-3.0 license
+            
+            ### Quick Start
+            ```bash
+            unzip hetzner-dyndns-${{ env.VERSION }}.zip
+            cd hetzner-dyndns-${{ env.VERSION }}
+            chmod +x dyndns.sh
+            HETZNER_AUTH_API_TOKEN='your-token' ./dyndns.sh -Z example.com -n dyn
+            ```
+            
+            For full documentation, see [README.md](https://github.com/${{ github.repository }}/blob/${{ env.VERSION }}/README.md)
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
